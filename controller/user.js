@@ -1,87 +1,142 @@
-const userViews = require('../service/userServices');
 const uuid = require('uuid');
+const path = require('path');
+const { ObjectId } = require('mongoose');
+const User = require('../model/user');
+const { error } = require('console');
+const service = require('../service/userServices');
 
 exports.getHomePage = async (req, res) => {
-    try {
-        const id = uuid.v4().replace(/-/g, '');
-        await userViews.createUser(id);
-        res.json(id);
-    } catch (error) {
-        handleError(res, error, "Error creating user");
-    }
-}
 
-exports.createUserData = async (req, res) => {
-    try {
-        const { userId, resource } = req.params;
-        const newData = { ...req.body, dataId: uuid.v1().replace(/-/g, '') };
+    const id = uuid.v4().replace(/-/g, '');
 
-        await userViews.updateUserField(userId, resource, newData);
+    await service.createResource(id);
 
-        res.status(201).json(newData);
-    } catch (error) {
-        handleError(res, error, "Error creating user data");
-    }
+    res.json(id);
 }
 
 exports.getFieldNames = async (req, res) => {
     try {
-        const { userId } = req.params;
-        const fields = Object.keys(await userViews.getUserByUserId(userId)).slice(3);
+        const userId = req.params.userId;
+        const userObject = await service.getAllResources(userId);
+        const fields = Object.keys(userObject[0]).slice(3);
+
         res.status(200).json(fields);
-    } catch (error) {
-        handleError(res, error, "Error fetching field data");
+    }
+    catch (error) {
+        res.status(500).json({
+            error: "Error fetching field data:"
+        });
     }
 }
 
+
 exports.getAllData = async (req, res) => {
     try {
-        const { userId, resource } = req.params;
-        const data = await userViews.getUserByUserId(userId);
-        res.status(200).json(data[resource]);
+        const userId = req.params.userId;
+        const resource = req.params.resource;
+        const data = await service.getAllResources(userId);
+
+        res.status(200).json(data[0][resource]);
     } catch (error) {
-        handleError(res, error, "Error fetching user data");
+        res.status(500).json({ error: "Error fetching user data:" });
     }
 };
 
-exports.deleteUserData = async (req, res) => {
+exports.createUserData = async (req, res) => {
     try {
-        const { userId, resource, id } = req.params;
+        const userId = req.params.userId;
+        const resource = req.params.resource;
+        const newData = req.body;
+        const dataId = uuid.v1();
+        newData["dataId"] = dataId.replace(/-/g, '');
 
-        await userViews.deleteUserDataById(userId, resource, id);
+        let userData = await service.findResource(userId);
+
+        if (!userData) {
+            throw new Error('User Not Found')
+        }
+        if (!userData[resource]) {
+            userData = await service.updateResource(userId,resource,newData);
+            return res.status(201).json(newData);
+        } else {
+            userData.markModified(resource);
+            userData[resource].push(newData);
+        }
+        await userData.save();
+
+        res.status(201).json(newData);
+    }
+    catch (err) {
+        res.status(500).json({ error: 'Error Occured while inserting data' })
+    }
+}
+
+exports.deleteUserData = async (req, res) => {
+
+    try {
+        const userId = req.params.userId;
+        const resource = req.params.resource
+        const deleteId = req.params.id;
+        const user = await service.findResource(userId);
+
+        const updated = user[resource].filter(ele => ele.dataId != deleteId);
+
+        await service.updateOneResource(userId,resource,updated);
 
         res.status(202).json({ message: 'Data deleted successfully' });
-    } catch (error) {
-        handleError(res, error, "Error deleting data");
+    }
+    catch (err) {
+        console.error("Error deleting data", err);
+        res.status(500).json({ error: 'Internal Servor Error' });
     }
 }
 
 exports.updateUserData = async (req, res) => {
     try {
-        const { userId, resource, id } = req.params;
+        const resource = req.params.resource;
+        const userId = req.params.userId;
+        const updateId = req.params.id;
         const updatedData = req.body;
+        updatedData["dataId"] = updateId;
+        const user = await service.findResource(userId);
 
-        await userViews.updateUserDataById(userId, resource, id, updatedData);
+        const indexToUpdate = user[resource].findIndex(ele => ele.dataId === updateId);
 
-        res.status(201).json(updatedData);
-    } catch (error) {
-        handleError(res, error, "Error updating data");
+        if (indexToUpdate === -1) {
+            return res.status(404).json({ error: 'Data not found' });
+        }
+
+        user[resource][indexToUpdate] = updatedData;
+
+        await service.updateOneResource(userId,resource,user[resource]);
+
+        res.status(201).json( user[resource][indexToUpdate] );
+
+    }
+    catch (err) {
+        console.error("Error updating data", err);
+        res.status(500).json({ error: 'Internal Servor Error' });
     }
 }
 
 exports.getUserDataById = async (req, res) => {
     try {
-        const { userId, resource, id } = req.params;
+        const userId = req.params.userId;
+        const resource = req.params.resource;
+        const dataId = req.params.id;
 
-        const data = await userViews.getUserDataById(userId, resource, id);
+        const user = await service.findResource(userId);
 
-        res.status(200).json(data);
-    } catch (error) {
-        handleError(res, error, "Error getting data");
+        const getIndex = user[resource].findIndex(ele => ele.dataId === dataId);
+
+        if (getIndex === -1) {
+            return res.status(404).json('User data not found');
+        }
+
+        res.status(200).json(user[resource][getIndex]);
     }
-}
-
-function handleError(res, error, message) {
-    console.error(message, error);
-    res.status(500).json({ error: message });
+    catch (err) {
+        console.error("error getting data", err);
+        res.status(500).json({ error: "Internal Sever Error" });
+    }
 }

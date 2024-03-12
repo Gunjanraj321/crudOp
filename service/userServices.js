@@ -1,6 +1,6 @@
 const User = require('../model/user');
 
-exports.createUser = async (userId) => {
+exports.createResource = async (userId) => {
     try {
         await User.create({ userId });
     } catch (error) {
@@ -8,53 +8,34 @@ exports.createUser = async (userId) => {
     }
 };
 
-exports.getUserByUserId = async (userId) => {
+exports.getAllResources = async (userId)=>{
+    try{
+        return await User.find({ userId: userId }, '-_id -userId -__v -currDate');
+    }catch (error) {
+        console.error("Error fetching field data:", error);
+    }
+}
+
+exports.findResource = async (userId) => {
     try {
-        return await User.findOne({ userId }, -_id -userId );
+        return await User.findOne({ userId });
     } catch (error) {
-        throw new Error('Error fetching user');
+        throw new Error('Error creating user');
     }
 };
 
-exports.updateUserField = async (userId, resource, newData) => {
-    try {
-        let userData = await User.findOneAndUpdate(
-            { userId },
-            { $push: { [resource]: newData } },
-            { upsert: true, new: true }
-        );
-        await userData.save();
-    } catch (error) {
-        throw new Error('Error updating user field');
+exports.updateResource = async(userId,resource,newData)=>{
+    try{
+        return await User.updateOne({ userId: userId }, { [resource]: [newData] });
+    }catch(error){
+        res.status(500).json({ error: 'Error Occured while updating data' })
     }
-};
+}
 
-exports.deleteUserDataById = async (userId, resource, dataId) => {
-    try {
-        await User.updateOne(
-            { userId },
-            { $pull: { [resource]: { dataId } } }
-        );
-    } catch (error) {
-        throw new Error('Error deleting user data');
+exports.updateOneResource = async(userId,resource,updated)=>{
+    try{
+        await User.findOneAndUpdate({ userId: userId }, { [resource]: updated })
+    }catch{
+    res.status(500).json({ error: 'Error deleting data' })
     }
-};
-
-exports.updateUserDataById = async (userId, resource, updateId, updatedData) => {
-    try {
-        await User.updateOne(
-            { userId, [`${resource}.dataId`]: updateId },
-            { $set: { [`${resource}.$`]: updatedData } }
-        );
-    } catch (error) {
-        throw new Error('Error updating user data');
-    }
-};
-
-exports.getUserDataById = async (userId, resource, dataId) => {
-    try {
-        return await User.findOne({ userId, [`${resource}.dataId`]: dataId }, `${resource}.$`);
-    } catch (error) {
-        throw new Error('Error getting user data');
-    }
-};
+}
