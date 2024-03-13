@@ -2,7 +2,6 @@ const uuid = require('uuid');
 const path = require('path');
 const { ObjectId } = require('mongoose');
 const User = require('../model/user');
-const { error } = require('console');
 const service = require('../service/userServices');
 
 exports.getHomePage = async (req, res) => {
